@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI-Driven Energy Optimization</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #2193b0, #6dd5ed);
+      color: #fff;
+      margin: 0;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 100%;
+      margin: auto;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 28px;
+      margin-bottom: 30px;
+      animation: fadeIn 1s ease-in-out;
+    }
+
+    .download-btn {
+      padding: 10px 20px;
+      margin: 20px auto;
+      display: block;
+      background-color: #fff;
+      color: #2193b0;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .table-container {
+      background: rgba(255, 255, 255, 0.2);
+      padding: 15px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      animation: fadeIn 1s ease-in-out;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      color: #000;
+    }
+
+    th, td {
+      padding: 12px;
+      text-align: center;
+      border-bottom: 1px solid rgba(255, 254, 254, 0);
+    }
+
+    th {
+      background: rgba(255, 255, 255, 0.397);
+    }
+
+    .charts-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      justify-content: center;
+    }
+
+    .chart-container {
+      flex: 1;
+      min-width: 300px;
+      max-width: 600px;
+      background: white;
+      padding: 10px;
+      border-radius: 10px;
+      margin: 10px;
+      height: 300px;
+    }
+
+    .side-by-side {
+      display: flex;
+      gap: 50px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .side-box {
+      flex: 1;
+      min-width: 300px;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 20px;
+      border-radius: 10px;
+      color: #000;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 600px) {
+      .charts-row, .side-by-side {
+        flex-direction: column;
+      }
+      .side-box {
+        margin-bottom: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>AI-Driven Software and Hardware Solutions for Smart Grid Energy Optimization</h1>
+    <button class="download-btn" onclick="downloadExcel()">Download Excel</button>
+
+    <!-- Data Table -->
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Voltage (V)</th>
+            <th>Current (A)</th>
+            <th>Temperature (°C)</th>
+            <th>Vibration</th>
+            <th>Result</th>
+          </tr>
+        </thead>
+        <tbody id="data-table">
+          <tr><td colspan="5">Loading data...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Sensor Threshold Table and Timer -->
+    <div class="side-by-side">
+      <div class="side-box">
+        <h2><center>SENSOR THRESHOLD RANGES</center></h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Sensor</th>
+              <th style="background-color: #4CAF50; color: white;">Normal</th>
+              <th style="background-color: #FFC107; color: rgb(2, 2, 2);">Warning</th>
+              <th style="background-color: #F44336; color: white;">Fault</th>
+            </tr>
+          </thead>  
+          <tbody>
+            <tr><td>Voltage</td><td>180 – 220</td><td>160 – 240</td><td>0 – 240</td></tr>
+            <tr><td>Current</td><td>60 – 100</td><td>50 – 110</td><td>0 – 120</td></tr>
+            <tr><td>Temperature</td><td>0 – 45</td><td>45 – 50</td><td>> 50</td></tr>
+            <tr><td>Vibration</td><td>0 – 45</td><td>45 – 50</td><td>> 50</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Timer -->
+      <div id="timerBox" class="side-box">
+        <h2>Short Circuit Duration Timer</h2>
+        <p><strong>Elapsed Time:</strong> <span id="timer">00:00:00</span></p>
+        <p><strong> Extra Units Consumed:</strong> <span id="units">0</span> kWh</p>
+      </div>
+    </div>
+
+    <!-- Sensor Graphs -->
+    <div class="charts-row">
+      <div class="chart-container"><canvas id="voltageChart"></canvas></div>
+      <div class="chart-container"><canvas id="currentChart"></canvas></div>
+    </div>
+    <div class="charts-row">
+      <div class="chart-container"><canvas id="temperatureChart"></canvas></div>
+      <div class="chart-container"><canvas id="vibrationChart"></canvas></div>
+    </div>
+  </div>
+
+  <script>
+    const apiUrl = "https://api.thingspeak.com/channels/596974/feeds.json?results=10";
+    let voltageChart, currentChart, temperatureChart, vibrationChart;
+    let timerInterval;
+    let secondsElapsed = 0;
+    const timerElement = document.getElementById("timer");
+    const unitsElement = document.getElementById("units");
+    let lastVoltage = 0;
+    let lastCurrent = 0;
+
+    function formatTime(seconds) {
+      const h = String(Math.floor(seconds / 3600)).padStart(2, '0');
+      const m = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
+      const s = String(seconds % 60).padStart(2, '0');
+      return `${h}:${m}:${s}`;
+    }
+
+    function calculateUnits(voltage, current, seconds) {
+      const powerKW = (voltage * current) / 1000;
+      const timeHours = seconds / 3600;
+      return +(powerKW * timeHours).toFixed(4);
+    }
+
+    function startTimer() {
+      if (!timerInterval) {
+        timerInterval = setInterval(() => {
+          secondsElapsed++;
+          timerElement.textContent = formatTime(secondsElapsed);
+          const units = calculateUnits(lastVoltage, lastCurrent, secondsElapsed);
+          unitsElement.textContent = units;
+        }, 1000);
+      }
+    }
+
+    function stopTimer() {
+      clearInterval(timerInterval);
+      timerInterval = null;
+      secondsElapsed = 0;
+      timerElement.textContent = "00:00:00";
+      unitsElement.textContent = "0";
+    }
+
+    function fetchData() {
+      fetch(apiUrl)
+        .then(res => res.json())
+        .then(data => {
+          const feeds = data.feeds;
+          let voltage = [], current = [], temperature = [], vibration = [], timestamps = [];
+
+          feeds.forEach(feed => {
+            voltage.push(parseFloat(feed.field1));
+            current.push(parseFloat(feed.field2));
+            temperature.push(parseFloat(feed.field3));
+            vibration.push(parseFloat(feed.field4));
+            timestamps.push(new Date(feed.created_at).toLocaleTimeString());
+          });
+
+          updateTable(feeds[feeds.length - 1]);
+          updateCharts(voltage, current, temperature, vibration, timestamps);
+        })
+        .catch(err => console.error("Fetch error:", err));
+    }
+
+    function updateTable(entry) {
+      const voltage = parseFloat(entry.field1);
+      const current = parseFloat(entry.field2);
+      lastVoltage = voltage;
+      lastCurrent = current;
+
+      document.getElementById("data-table").innerHTML = ` 
+        <tr>
+          <td>${voltage} V</td>
+          <td>${current} A</td>
+          <td>${entry.field3} °C</td>
+          <td>${entry.field4}</td>
+          <td>${entry.field5}</td>
+        </tr>`;
+
+      if (entry.field5 === "SHORT_CIRCUIT") {
+        startTimer();
+      } else {
+        stopTimer();
+      }
+    }
+
+    function createChart(ctx, label, data, borderColor) {
+      return new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: Array(data.length).fill(""),
+          datasets: [{
+            label: label,
+            data: data,
+            borderColor: borderColor,
+            backgroundColor: "rgba(255,255,255,0.1)",
+            borderWidth: 2,
+            pointRadius: 3,
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { display: false },
+            y: { beginAtZero: true }
+          }
+        }
+      });
+    }
+
+    function updateCharts(voltage, current, temperature, vibration, timestamps) {
+      if (!voltageChart) {
+        voltageChart = createChart(document.getElementById("voltageChart").getContext("2d"), "Voltage (V)", voltage, "red");
+        currentChart = createChart(document.getElementById("currentChart").getContext("2d"), "Current (A)", current, "blue");
+        temperatureChart = createChart(document.getElementById("temperatureChart").getContext("2d"), "Temperature (°C)", temperature, "green");
+        vibrationChart = createChart(document.getElementById("vibrationChart").getContext("2d"), "Vibration", vibration, "orange");
+      } else {
+        voltageChart.data.labels = timestamps;
+        currentChart.data.labels = timestamps;
+        temperatureChart.data.labels = timestamps;
+        vibrationChart.data.labels = timestamps;
+
+        voltageChart.data.datasets[0].data = voltage;
+        currentChart.data.datasets[0].data = current;
+        temperatureChart.data.datasets[0].data = temperature;
+        vibrationChart.data.datasets[0].data = vibration;
+
+        voltageChart.update();
+        currentChart.update();
+        temperatureChart.update();
+        vibrationChart.update();
+      }
+    }
+
+    function downloadExcel() {
+      fetch(apiUrl)
+        .then(res => res.json())
+        .then(data => {
+          const feeds = data.feeds.map(feed => ({
+            Timestamp: new Date(feed.created_at).toLocaleString(),
+            Voltage: feed.field1,
+            Current: feed.field2,
+            Temperature: feed.field3,
+            Vibration: feed.field4,
+            Result: feed.field5
+          }));
+
+          const worksheet = XLSX.utils.json_to_sheet(feeds);
+          const workbook = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(workbook, worksheet, "SensorData");
+
+          XLSX.writeFile(workbook, "SmartGridSensorData.xlsx");
+        })
+        .catch(err => console.error("Excel export error:", err));
+    }
+
+    fetchData();
+    setInterval(fetchData, 5000);
+  </script>
+</body>
+</html>
